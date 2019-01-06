@@ -7,7 +7,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import StratifiedKFold,ParameterGrid
 from sklearn.metrics import log_loss,roc_auc_score,roc_curve,auc
 import xgboost as xgb
-import tqdm as tqdm
+from tqdm import tqdm
 
 logger = getLogger(__name__)
 DIR = 'log/'
@@ -22,7 +22,7 @@ def gini(y, pred):
     #return gs / len(y)
     fpr,tpr,thr = roc_curve(y,pred,pos_label=1)
     g = 2 * auc(fpr,tpr) - 1
-    return g
+    return - g
 
 def gini_xgb(pred, y):
     y = y.get_label()
@@ -63,23 +63,23 @@ if __name__ == '__main__':
     cv = StratifiedKFold(n_splits=5,shuffle=True,random_state=0)
     
     #Parameter grid search
-    #all_param = {'max_depth': [3],
-    #             'learning_rate': [0.1],
-    #             'min_child_weight': [3],
-    #             'n_estimators': [10000],
-    #             'colsample_bytree': [0.8],
-    #             'colsample_bylevel': [0.8],
-    #             'reg_alpha': [0.1],
-    #             'max_delta_step': [0.1],
-    #             'seed': [0],
-    #            }
+    all_param = {'max_depth': [4],
+                 'learning_rate': [0.1],
+                 'min_child_weight': [10],
+                 'n_estimators': [500],
+                 'colsample_bytree': [0.9],
+                 'colsample_bylevel': [0.9],
+                 'reg_alpha': [0],
+                 'max_delta_step': [0],
+                 'seed': [0]
+                }
     
-    all_param = {'seed': [0]}
+    #all_param = {'seed': [0]}
     
     max_score = -100
     max_params = None
     
-    for params in ParameterGrid(all_param):
+    for params in tqdm(list(ParameterGrid(all_param))):
         
         logger.info('params:{}'.format(params))
         
@@ -101,7 +101,12 @@ if __name__ == '__main__':
             #xgboost fitting
             clf = xgb.sklearn.XGBClassifier(**params)
             logger.info('model making end')
-            clf.fit(trn_x,trn_y)
+            clf.fit(trn_x,
+                    trn_y,
+                    eval_set=[(val_x,val_y)],
+                    eval_metric=gini_xgb,
+                    early_stopping_rounds=100
+                   )
             
            #clf.fit(trn_x,
            #        trn_y,
@@ -127,7 +132,7 @@ if __name__ == '__main__':
         #    max_score = list_auc
         #    max_params = params
         
-        if max_score < np.mean(list_gini):
+        if max_score < - np.mean(list_gini):
             max_score = np.mean(list_gini)
             max_params = params
             
